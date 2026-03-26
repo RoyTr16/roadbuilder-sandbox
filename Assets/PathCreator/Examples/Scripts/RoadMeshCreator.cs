@@ -8,6 +8,8 @@ namespace PathCreation.Examples {
         public float roadWidth = .4f;
         [Range (0, .5f)]
         public float thickness = .15f;
+        [Header("True-Scale UV Mapping")]
+        public float textureMetersPerTile = 4f;
         public bool flattenSurface;
 
         [Header ("Material settings")]
@@ -73,9 +75,26 @@ namespace PathCreation.Examples {
                 verts[vertIndex + 6] = verts[vertIndex + 2];
                 verts[vertIndex + 7] = verts[vertIndex + 3];
 
-                // Set uv on y axis to path time (0 at start of path, up to 1 at end of path)
-                uvs[vertIndex + 0] = new Vector2 (0, path.times[i]);
-                uvs[vertIndex + 1] = new Vector2 (1, path.times[i]);
+                // --- OUR TRUE-SCALE UV FIX ---
+                float distanceWalked = path.cumulativeLengthAtEachVertex[i];
+                float v = distanceWalked / textureMetersPerTile;
+                float uMax = roadWidth / textureMetersPerTile;
+
+                // Top surface UVs
+                uvs[vertIndex + 0] = new Vector2(0, v);
+                uvs[vertIndex + 1] = new Vector2(uMax, v);
+
+                // Underneath surface UVs (if thickness > 0)
+                if (thickness > 0) {
+                    uvs[vertIndex + 2] = new Vector2(0, v);
+                    uvs[vertIndex + 3] = new Vector2(uMax, v);
+
+                    // Side edge UVs
+                    uvs[vertIndex + 4] = new Vector2(0, v);
+                    uvs[vertIndex + 5] = new Vector2(thickness / textureMetersPerTile, v);
+                    uvs[vertIndex + 6] = new Vector2(0, v);
+                    uvs[vertIndex + 7] = new Vector2(thickness / textureMetersPerTile, v);
+                }
 
                 // Top of road normals
                 normals[vertIndex + 0] = localUp;
@@ -115,6 +134,7 @@ namespace PathCreation.Examples {
             mesh.SetTriangles (underRoadTriangles, 1);
             mesh.SetTriangles (sideOfRoadTriangles, 2);
             mesh.RecalculateBounds ();
+            mesh.RecalculateTangents();
         }
 
         // Add MeshRenderer and MeshFilter components to this gameobject if not already attached
