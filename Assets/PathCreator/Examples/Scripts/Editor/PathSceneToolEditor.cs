@@ -61,7 +61,12 @@ namespace PathCreation.Examples
 
         protected virtual void OnEnable()
         {
-            pathTool = (PathSceneTool)target;
+            pathTool = target as PathSceneTool;
+            if (pathTool == null)
+            {
+                Debug.LogWarning($"[PathSceneToolEditor] Expected a PathSceneTool but found {target?.GetType().Name}. Aborting Inspector setup.");
+                return;
+            }
             pathTool.onDestroyed += OnToolDestroyed;
 
             if (TryFindPathCreator())
@@ -77,7 +82,7 @@ namespace PathCreation.Examples
             }
         }
 
- 
+
         protected virtual void Subscribe()
         {
             if (pathTool.pathCreator != null)

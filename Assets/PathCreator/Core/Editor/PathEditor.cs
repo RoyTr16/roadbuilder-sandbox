@@ -621,7 +621,7 @@ namespace PathCreationEditor
 
 			if (doTransformHandle)
 			{
-				// Show normals rotate tool 
+				// Show normals rotate tool
 				if (data.showNormals && Tools.current == Tool.Rotate && isAnchorPoint && bezierPath.Space == PathSpace.xyz)
 				{
 					Handles.color = handlesStartCol;
@@ -720,7 +720,12 @@ namespace PathCreationEditor
 
 		void OnEnable()
 		{
-			creator = (PathCreator)target;
+			creator = target as PathCreator;
+			if (creator == null)
+			{
+					Debug.LogWarning($"[PathEditor] Expected a PathCreator but found {target?.GetType().Name}. Aborting Inspector setup to prevent crash.");
+					return;
+			}
 			bool in2DEditorMode = EditorSettings.defaultBehaviorMode == EditorBehaviorMode.Mode2D;
 			creator.InitializeEditorData(in2DEditorMode);
 
