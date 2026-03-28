@@ -11,6 +11,8 @@ public class RoadNode
     // The critical graph link: A list of all roads touching this intersection
     [SerializeReference] public List<RoadEdge> connectedEdges = new List<RoadEdge>();
     public List<Vector3> polygonVertices = new List<Vector3>();
+    // DIAGNOSTIC DATA: Stores the exact perimeter path the mesh generator is trying to take
+    public List<Vector3> diagnosticPerimeter = new List<Vector3>();
 
     // Constructor
     public RoadNode(Vector3 pos, float r = 5f)
@@ -37,8 +39,8 @@ public class RoadNode
             dir2 = dir2.normalized;
             float angle2 = Mathf.Atan2(dir2.z, dir2.x);
 
-            // Compare the angles to sort them from smallest to largest
-            return angle1.CompareTo(angle2);
+            // Sort descending (angle2 compared to angle1) to force a CLOCKWISE order
+            return angle2.CompareTo(angle1);
         });
     }
 
@@ -109,7 +111,7 @@ public class RoadNode
 
             // 4. Calculate the Normal (perpendicular) pointing OUTWARD
             // In Unity, crossing the UP vector with a clockwise direction gives an outward normal
-            Vector3 outwardNormal = Vector3.Cross(Vector3.up, edgeDirection).normalized;
+            Vector3 outwardNormal = Vector3.Cross(edgeDirection, Vector3.up).normalized;
 
             // 5. Place the Bezier Control Point exactly along that normal
             // We push it out by half the road's length (just a standard Bezier tangent strength)
