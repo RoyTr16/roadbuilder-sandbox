@@ -11,6 +11,10 @@ public class RoadEdge
     public Vector3 controlPoint1;
     public Vector3 controlPoint2;
 
+    // The Non-Destructive Trim Values (0.0 to 1.0)
+    public float trimStart = 0f;
+    public float trimEnd = 1f;
+
     public RoadEdge(RoadNode nodeA, RoadNode nodeB, float w = 6f)
     {
         a = nodeA;

@@ -61,12 +61,17 @@ public class RoadNetwork : MonoBehaviour
                 // 1. Draw the Bezier Curve Spine (Yellow)
                 Gizmos.color = Color.yellow;
                 int segments = 20;
-                Vector3 previousPoint = edge.a.position;
+
+                // Start exactly at the trim value!
+                Vector3 previousPoint = MathUtility.CalculateBezierPoint(edge.trimStart, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
 
                 for (int i = 1; i <= segments; i++)
                 {
-                    float t = i / (float)segments;
-                    Vector3 currentPoint = CalculateBezierPoint(t, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
+                    // Calculate the percentage strictly between trimStart and trimEnd
+                    float lerpFactor = i / (float)segments;
+                    float t = Mathf.Lerp(edge.trimStart, edge.trimEnd, lerpFactor);
+
+                    Vector3 currentPoint = MathUtility.CalculateBezierPoint(t, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
                     Gizmos.DrawLine(previousPoint, currentPoint);
                     previousPoint = currentPoint;
                 }
@@ -80,23 +85,6 @@ public class RoadNetwork : MonoBehaviour
                 Gizmos.DrawSphere(edge.controlPoint2, 1f); // P2 Handle
             }
         }
-    }
-
-    // Pure cubic Bezier math
-    Vector3 CalculateBezierPoint(float t, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
-    {
-        float u = 1 - t;
-        float tt = t * t;
-        float uu = u * u;
-        float uuu = uu * u;
-        float ttt = tt * t;
-
-        Vector3 p = uuu * p0;
-        p += 3 * uu * t * p1;
-        p += 3 * u * tt * p2;
-        p += ttt * p3;
-
-        return p;
     }
 
     // --- THE TESTBENCH ---
@@ -122,6 +110,9 @@ public class RoadNetwork : MonoBehaviour
 
         // 4. ALIGN THE ROADS to the new shape
         centerHub.AlignRoadsToPolygon();
+
+        // 5. TRIM THE ROADS so they don't poke through the walls
+        centerHub.TrimIntersectingRoads();
 
         Debug.Log("Test Network Generated! Check the Scene View.");
 

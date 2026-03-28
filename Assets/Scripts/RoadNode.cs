@@ -120,4 +120,78 @@ public class RoadNode
             edge.SetControlPointForNode(this, newControlPoint);
         }
     }
+
+    // Trims the Bezier curves exactly where they hit the polygon boundary
+    public void TrimIntersectingRoads()
+    {
+        if (polygonVertices.Count < 2) return;
+
+        int resolution = 20; // Resolution of our collision check
+
+        for (int i = 0; i < connectedEdges.Count; i++)
+        {
+            RoadEdge edge = connectedEdges[i];
+
+            // 1. Get the 2D magenta polygon edge
+            Vector3 cornerA3D = polygonVertices[i];
+            Vector3 cornerB3D = polygonVertices[(i + 1) % polygonVertices.Count];
+            Vector2 polyA = new Vector2(cornerA3D.x, cornerA3D.z);
+            Vector2 polyB = new Vector2(cornerB3D.x, cornerB3D.z);
+
+            // 2. Walk the Bezier curve
+            Vector3 previousPoint3D = edge.a == this ? edge.a.position : edge.b.position;
+            float previousT = edge.a == this ? 0f : 1f;
+
+            for (int step = 1; step <= resolution; step++)
+            {
+                float currentT = edge.a == this ? (step / (float)resolution) : (1f - (step / (float)resolution));
+                Vector3 currentPoint3D = MathUtility.CalculateBezierPoint(currentT, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
+
+                Vector2 curveStart = new Vector2(previousPoint3D.x, previousPoint3D.z);
+                Vector2 curveEnd = new Vector2(currentPoint3D.x, currentPoint3D.z);
+
+                // 3. The Collision Cut
+                if (LineSegmentsIntersect2D(curveStart, curveEnd, polyA, polyB, out float fraction))
+                {
+                    float exactT = previousT + ((currentT - previousT) * fraction);
+
+                    if (edge.a == this) edge.trimStart = exactT;
+                    else edge.trimEnd = exactT;
+
+                    break;
+                }
+
+                previousPoint3D = currentPoint3D;
+                previousT = currentT;
+            }
+        }
+    }
+
+    // Pure 2D Line Intersection Math (Ignoring Y axis)
+    bool LineSegmentsIntersect2D(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, out float fractionP1P2)
+    {
+        fractionP1P2 = 0f;
+
+        Vector2 p1p2 = p2 - p1;
+        Vector2 p3p4 = p4 - p3;
+        Vector2 p1p3 = p3 - p1;
+
+        // 2D Cross product to find if the lines are parallel
+        float determinant = (p1p2.x * p3p4.y) - (p1p2.y * p3p4.x);
+
+        if (Mathf.Abs(determinant) < 0.0001f) return false; // Lines are parallel
+
+        // Calculate the exact fractional collision points for both lines
+        float tA = ((p1p3.x * p3p4.y) - (p1p3.y * p3p4.x)) / determinant;
+        float tB = ((p1p3.x * p1p2.y) - (p1p3.y * p1p2.x)) / determinant;
+
+        // If both fractions are between 0 and 1, the segments physically cross!
+        if (tA >= 0f && tA <= 1f && tB >= 0f && tB <= 1f)
+        {
+            fractionP1P2 = tA;
+            return true;
+        }
+
+        return false;
+    }
 }
