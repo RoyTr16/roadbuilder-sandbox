@@ -196,4 +196,45 @@ public class RoadNode
 
         return false;
     }
+
+    // Handles smoothing for Dead Ends (1 road) and Pass-Throughs (2 roads)
+    public void SmoothSplines()
+    {
+        if (connectedEdges.Count == 1)
+        {
+            // DEAD END: Just point the control handle straight toward the other node
+            RoadEdge edge = connectedEdges[0];
+            RoadNode neighbor = (edge.a == this) ? edge.b : edge.a;
+
+            Vector3 dir = (neighbor.position - this.position).normalized;
+            float dist = Vector3.Distance(this.position, neighbor.position);
+
+            // Set the control point 1/3rd of the way down the line
+            if (edge.a == this) edge.controlPoint1 = this.position + dir * (dist * 0.33f);
+            else edge.controlPoint2 = this.position + dir * (dist * 0.33f);
+        }
+        else if (connectedEdges.Count == 2)
+        {
+            // PASS-THROUGH: Enforce Tangent Continuity (Lock handles at 180 degrees)
+            RoadEdge edge1 = connectedEdges[0];
+            RoadEdge edge2 = connectedEdges[1];
+
+            RoadNode neighbor1 = (edge1.a == this) ? edge1.b : edge1.a;
+            RoadNode neighbor2 = (edge2.a == this) ? edge2.b : edge2.a;
+
+            // The master tangent runs parallel to the invisible line connecting the two neighbors
+            Vector3 masterTangent = (neighbor1.position - neighbor2.position).normalized;
+
+            float dist1 = Vector3.Distance(this.position, neighbor1.position);
+            float dist2 = Vector3.Distance(this.position, neighbor2.position);
+
+            // Push edge 1's handle along the master tangent
+            if (edge1.a == this) edge1.controlPoint1 = this.position + masterTangent * (dist1 * 0.33f);
+            else edge1.controlPoint2 = this.position + masterTangent * (dist1 * 0.33f);
+
+            // Push edge 2's handle in the EXACT OPPOSITE direction (-masterTangent)
+            if (edge2.a == this) edge2.controlPoint1 = this.position - masterTangent * (dist2 * 0.33f);
+            else edge2.controlPoint2 = this.position - masterTangent * (dist2 * 0.33f);
+        }
+    }
 }

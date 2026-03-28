@@ -103,7 +103,39 @@ public class RoadNetwork : MonoBehaviour
                 Gizmos.DrawLine(edge.b.position, edge.controlPoint2);
                 Gizmos.DrawSphere(edge.controlPoint2, 1f); // P2 Handle
             }
+            // --- DIAGNOSTIC: BEZIER X-RAY ---
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawSphere(edge.controlPoint1, 0.5f);
+            Gizmos.DrawSphere(edge.controlPoint2, 0.5f);
+
+            // Draw lines connecting the handles to their owner nodes
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawLine(edge.a.position, edge.controlPoint1);
+            Gizmos.DrawLine(edge.b.position, edge.controlPoint2);
         }
+    }
+
+    // --- DIAGNOSTIC: STATE DUMP ---
+    public void DumpNetworkState()
+    {
+        Debug.LogWarning("=== ROAD NETWORK STATE DUMP ===");
+        Debug.Log($"Total Nodes: {nodes.Count} | Total Edges: {edges.Count}");
+
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            RoadNode n = nodes[i];
+            Debug.Log($"[Node {i}] Pos: {n.position} | Edges Attached: {n.connectedEdges.Count}");
+
+            for (int e = 0; e < n.connectedEdges.Count; e++)
+            {
+                RoadEdge edge = n.connectedEdges[e];
+                string role = (edge.a == n) ? "Start (Control 1)" : "End (Control 2)";
+                Vector3 handlePos = (edge.a == n) ? edge.controlPoint1 : edge.controlPoint2;
+
+                Debug.Log($"   -> Edge {e} is {role}. Handle at: {handlePos}");
+            }
+        }
+        Debug.LogWarning("===============================");
     }
 
     // --- THE FABRICATOR (MESH GENERATION) ---
@@ -140,7 +172,7 @@ public class RoadNetwork : MonoBehaviour
         // 4. Loop through the Nodes and build the Hubs
         foreach (RoadNode node in nodes)
         {
-            if (node.connectedEdges.Count >= 2)
+            if (node.connectedEdges.Count > 2)
             {
                 Mesh hubMesh = GenerateIntersectionMesh(node);
                 if (hubMesh == null) continue;
@@ -341,37 +373,35 @@ public class RoadNetwork : MonoBehaviour
         return mesh;
     }
 
-    // --- THE TESTBENCH ---
-    [ContextMenu("Generate Test Network")]
-    public void GenerateTestNetwork()
+    // --- THE MASTER REBUILDER ---
+    // The Editor tool will call this every time you click the mouse
+    public void RebuildNetwork()
     {
-        ClearNetwork(); // Flush the old data
+        // 1. Process all Nodes based on their type
+        foreach (RoadNode node in nodes)
+        {
+            if (node.connectedEdges.Count > 2)
+            {
+                // It's a true intersection! Run the complex geometry math.
+                node.CalculateIntersectionPolygon();
+                node.AlignRoadsToPolygon();
+                node.TrimIntersectingRoads();
+            }
+            else
+            {
+                // It's a Spline! Smooth the curves and ensure full rendering.
+                node.SmoothSplines();
 
-        // 1. Define the physical pins (Nodes)
-        RoadNode centerHub = CreateNode(new Vector3(0, 0, 0));
+                foreach (RoadEdge edge in node.connectedEdges)
+                {
+                    if (edge.a == node) edge.trimStart = 0f;
+                    if (edge.b == node) edge.trimEnd = 1f;
+                }
+                node.polygonVertices.Clear(); // Erase any old magenta intersection data
+            }
+        }
 
-        RoadNode northEnd = CreateNode(new Vector3(0, 0, 50));
-        RoadNode southWestEnd = CreateNode(new Vector3(-40, 0, -40));
-        RoadNode southEastEnd = CreateNode(new Vector3(40, 0, -40));
-
-        // 2. Route the wires (Edges)
-        ConnectNodes(centerHub, northEnd);
-        ConnectNodes(centerHub, southWestEnd);
-        ConnectNodes(centerHub, southEastEnd);
-
-        // 3. Command the center hub to calculate its custom shape
-        centerHub.CalculateIntersectionPolygon();
-
-        // 4. ALIGN THE ROADS to the new shape
-        centerHub.AlignRoadsToPolygon();
-
-        // 5. TRIM THE ROADS so they don't poke through the walls
-        centerHub.TrimIntersectingRoads();
-
-        // 6. Build the physical roads based on the final data
+        // 2. Build Physical Geometry
         BuildPhysicalRoads();
-
-        Debug.Log("Test Network Generated! Check the Scene View.");
-
     }
 }
