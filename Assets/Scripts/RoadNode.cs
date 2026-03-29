@@ -151,6 +151,64 @@ public class RoadNode
             if (edge2.a == this) edge2.controlPoint1 = this.position - masterTangent * (dist2 * 0.33f);
             else edge2.controlPoint2 = this.position - masterTangent * (dist2 * 0.33f);
         }
+        else if (connectedEdges.Count >= 3)
+        {
+            // INTERSECTION: Detect the "main road" pair (widest angle) and apply tangent continuity
+            RoadEdge bestA = null;
+            RoadEdge bestB = null;
+            float maxAngle = -1f;
+
+            for (int i = 0; i < connectedEdges.Count; i++)
+            {
+                for (int j = i + 1; j < connectedEdges.Count; j++)
+                {
+                    RoadNode ni = (connectedEdges[i].a == this) ? connectedEdges[i].b : connectedEdges[i].a;
+                    RoadNode nj = (connectedEdges[j].a == this) ? connectedEdges[j].b : connectedEdges[j].a;
+
+                    Vector3 dirI = (ni.position - this.position).normalized;
+                    Vector3 dirJ = (nj.position - this.position).normalized;
+                    float angle = Vector3.Angle(dirI, dirJ);
+
+                    if (angle > maxAngle)
+                    {
+                        maxAngle = angle;
+                        bestA = connectedEdges[i];
+                        bestB = connectedEdges[j];
+                    }
+                }
+            }
+
+            // Apply pass-through tangent continuity to the main road pair
+            if (bestA != null && bestB != null)
+            {
+                RoadNode neighborA = (bestA.a == this) ? bestA.b : bestA.a;
+                RoadNode neighborB = (bestB.a == this) ? bestB.b : bestB.a;
+
+                Vector3 masterTangent = (neighborA.position - neighborB.position).normalized;
+
+                float distA = Vector3.Distance(this.position, neighborA.position);
+                float distB = Vector3.Distance(this.position, neighborB.position);
+
+                if (bestA.a == this) bestA.controlPoint1 = this.position + masterTangent * (distA * 0.33f);
+                else bestA.controlPoint2 = this.position + masterTangent * (distA * 0.33f);
+
+                if (bestB.a == this) bestB.controlPoint1 = this.position - masterTangent * (distB * 0.33f);
+                else bestB.controlPoint2 = this.position - masterTangent * (distB * 0.33f);
+            }
+
+            // Side streets: point directly at their neighbor
+            foreach (RoadEdge edge in connectedEdges)
+            {
+                if (edge == bestA || edge == bestB) continue;
+
+                RoadNode neighbor = (edge.a == this) ? edge.b : edge.a;
+                float dist = Vector3.Distance(this.position, neighbor.position);
+                Vector3 newCP = this.position + ((neighbor.position - this.position).normalized * dist * 0.33f);
+
+                if (edge.a == this) edge.controlPoint1 = newCP;
+                else edge.controlPoint2 = newCP;
+            }
+        }
 
         if (connectedEdges.Count > 0)
             Debug.Log($"<color=blue>[1. Splines] Smoothed node@{position}. CP1={connectedEdges[0].controlPoint1}</color>");

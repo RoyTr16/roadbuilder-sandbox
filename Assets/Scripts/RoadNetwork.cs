@@ -272,8 +272,24 @@ public class RoadNetwork : MonoBehaviour
             perimeterVertices.Add(currentEdge.rightVertex);
 
             // 2. Bridge the gap: currentEdge.rightVertex → nextEdge.leftVertex
+            float gapDist = Vector3.Distance(currentEdge.rightVertex, nextEdge.leftVertex);
             Vector3 midpoint = Vector3.Lerp(currentEdge.rightVertex, nextEdge.leftVertex, 0.5f);
-            Vector3 controlPoint = Vector3.Lerp(midpoint, node.position, curveStrength);
+
+            // Dynamic fillet: angle between outward directions determines concave vs convex
+            float angle = Vector3.Angle(currentEdge.direction, nextEdge.direction);
+            Vector3 controlPoint;
+
+            if (angle < 135f)
+            {
+                // Tight corner: pull inward for concave fillet
+                controlPoint = Vector3.Lerp(midpoint, node.position, curveStrength);
+            }
+            else
+            {
+                // Wide angle (back of T-junction): push outward to preserve road bump
+                Vector3 outwardDir = (midpoint - node.position).normalized;
+                controlPoint = midpoint + (outwardDir * gapDist * 0.25f);
+            }
 
             // Quadratic Bezier curve samples (excluding endpoints — they are already in the list)
             for (int step = 1; step < curveResolution; step++)
