@@ -249,14 +249,69 @@ public class RoadNetwork : MonoBehaviour
         return mesh;
     }
 
-    // STUB: Will be replaced in Phase 2 with Triangle Fan + Bezier fillet mesh
     Mesh GenerateIntersectionMesh(RoadNode node)
     {
         if (node.junctionEdges.Count < 2) return null;
 
-        // Phase 2 will build the mesh here using junctionEdges data.
-        // For now, return null so we can visually test the JunctionEdge data with Gizmos.
-        return null;
+        int curveResolution = 8;
+        float curveStrength = 0.2f;
+        List<Vector3> perimeterVertices = new List<Vector3>();
+
+        for (int i = 0; i < node.junctionEdges.Count; i++)
+        {
+            JunctionEdge currentEdge = node.junctionEdges[i];
+            JunctionEdge nextEdge = node.junctionEdges[(i + 1) % node.junctionEdges.Count];
+
+            // 1. Add the straight road-end cap (left → right)
+            perimeterVertices.Add(currentEdge.leftVertex);
+            perimeterVertices.Add(currentEdge.rightVertex);
+
+            // 2. Bridge the gap: currentEdge.rightVertex → nextEdge.leftVertex
+            Vector3 midpoint = Vector3.Lerp(currentEdge.rightVertex, nextEdge.leftVertex, 0.5f);
+            Vector3 controlPoint = Vector3.Lerp(midpoint, node.position, curveStrength);
+
+            // Quadratic Bezier curve samples (excluding endpoints — they are already in the list)
+            for (int step = 1; step < curveResolution; step++)
+            {
+                float t = step / (float)curveResolution;
+                Vector3 l1 = Vector3.Lerp(currentEdge.rightVertex, controlPoint, t);
+                Vector3 l2 = Vector3.Lerp(controlPoint, nextEdge.leftVertex, t);
+                perimeterVertices.Add(Vector3.Lerp(l1, l2, t));
+            }
+        }
+
+        // 3. Build the triangle fan mesh
+        Mesh mesh = new Mesh();
+        mesh.name = "Procedural_Intersection_Hub";
+
+        int perimCount = perimeterVertices.Count;
+        Vector3[] vertices = new Vector3[perimCount + 1];
+        Vector2[] uvs = new Vector2[perimCount + 1];
+        int[] triangles = new int[perimCount * 3];
+
+        // Index 0 = dead center
+        vertices[0] = node.position;
+        uvs[0] = Vector2.zero;
+
+        for (int i = 0; i < perimCount; i++)
+        {
+            vertices[i + 1] = perimeterVertices[i];
+            uvs[i + 1] = Vector2.zero;
+
+            int current = i + 1;
+            int next = (i + 1) % perimCount + 1;
+
+            triangles[i * 3 + 0] = 0;       // Center
+            triangles[i * 3 + 1] = current;  // Current perimeter vertex
+            triangles[i * 3 + 2] = next;     // Next perimeter vertex
+        }
+
+        mesh.vertices = vertices;
+        mesh.triangles = triangles;
+        mesh.uv = uvs;
+        mesh.RecalculateNormals();
+
+        return mesh;
     }
 
     // --- THE MASTER REBUILDER ---
