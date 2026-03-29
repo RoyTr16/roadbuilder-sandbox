@@ -39,37 +39,34 @@ public class RoadNetwork : MonoBehaviour
             Gizmos.color = Color.cyan;
             Gizmos.DrawWireSphere(node.position, node.radius);
 
-            // // Draw the Hub Polygon (Magenta)
-            // if (node.polygonVertices.Count > 0)
-            // {
-            //     Gizmos.color = Color.magenta;
-            //     for (int i = 0; i < node.polygonVertices.Count; i++)
-            //     {
-            //         // Draw a line from the current corner to the next corner
-            //         Vector3 currentCorner = node.polygonVertices[i];
-            //         Vector3 nextCorner = node.polygonVertices[(i + 1) % node.polygonVertices.Count];
-            //         Gizmos.DrawLine(currentCorner, nextCorner);
-            //     }
-            // }
-            // --- DIAGNOSTIC: DRAW THE PERIMETER PATH ---
-            // if (node.diagnosticPerimeter != null && node.diagnosticPerimeter.Count > 0)
-            // {
-            //     for (int i = 0; i < node.diagnosticPerimeter.Count; i++)
-            //     {
-            //         Vector3 currentPoint = node.diagnosticPerimeter[i];
-            //         Vector3 nextPoint = node.diagnosticPerimeter[(i + 1) % node.diagnosticPerimeter.Count];
+            // --- PHASE 1 VISUAL TEST: JunctionEdge Ring ---
+            if (node.junctionEdges != null && node.junctionEdges.Count > 0)
+            {
+                for (int i = 0; i < node.junctionEdges.Count; i++)
+                {
+                    JunctionEdge je = node.junctionEdges[i];
 
-            //         // Draw a sphere at every vertex
-            //         Gizmos.color = Color.red;
-            //         Gizmos.DrawSphere(currentPoint, 0.3f);
+                    // Blue sphere = Left vertex
+                    Gizmos.color = Color.blue;
+                    Gizmos.DrawSphere(je.leftVertex, 0.4f);
 
-            //         // Draw a bright green line showing the exact path it travels to the next vertex
-            //         Gizmos.color = Color.green;
+                    // Red sphere = Right vertex
+                    Gizmos.color = Color.red;
+                    Gizmos.DrawSphere(je.rightVertex, 0.4f);
 
-            //         // We draw the line slightly elevated so it doesn't clip into the broken mesh
-            //         Gizmos.DrawLine(currentPoint + Vector3.up * 0.5f, nextPoint + Vector3.up * 0.5f);
-            //     }
-            // }
+                    // White sphere = Road center (where road stops)
+                    Gizmos.color = Color.white;
+                    Gizmos.DrawSphere(je.roadCenter, 0.25f);
+
+                    // Yellow ray = Outward direction
+                    Gizmos.color = Color.yellow;
+                    Gizmos.DrawLine(node.position, je.roadCenter);
+
+                    // Green line = road-end edge (left to right)
+                    Gizmos.color = Color.green;
+                    Gizmos.DrawLine(je.leftVertex, je.rightVertex);
+                }
+            }
         }
 
         // Draw Roads & Handles
@@ -81,12 +78,10 @@ public class RoadNetwork : MonoBehaviour
                 Gizmos.color = Color.yellow;
                 int segments = 20;
 
-                // Start exactly at the trim value!
                 Vector3 previousPoint = MathUtility.CalculateBezierPoint(edge.trimStart, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
 
                 for (int i = 1; i <= segments; i++)
                 {
-                    // Calculate the percentage strictly between trimStart and trimEnd
                     float lerpFactor = i / (float)segments;
                     float t = Mathf.Lerp(edge.trimStart, edge.trimEnd, lerpFactor);
 
@@ -95,23 +90,14 @@ public class RoadNetwork : MonoBehaviour
                     previousPoint = currentPoint;
                 }
 
-                // 2. Draw the Control Handles (Green) so we can see the math
+                // 2. Draw the Control Handles (Green)
                 Gizmos.color = Color.green;
                 Gizmos.DrawLine(edge.a.position, edge.controlPoint1);
-                Gizmos.DrawSphere(edge.controlPoint1, 1f); // P1 Handle
+                Gizmos.DrawSphere(edge.controlPoint1, 0.5f);
 
                 Gizmos.DrawLine(edge.b.position, edge.controlPoint2);
-                Gizmos.DrawSphere(edge.controlPoint2, 1f); // P2 Handle
+                Gizmos.DrawSphere(edge.controlPoint2, 0.5f);
             }
-            // --- DIAGNOSTIC: BEZIER X-RAY ---
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawSphere(edge.controlPoint1, 0.5f);
-            Gizmos.DrawSphere(edge.controlPoint2, 0.5f);
-
-            // Draw lines connecting the handles to their owner nodes
-            Gizmos.color = Color.magenta;
-            Gizmos.DrawLine(edge.a.position, edge.controlPoint1);
-            Gizmos.DrawLine(edge.b.position, edge.controlPoint2);
         }
     }
 
@@ -263,114 +249,14 @@ public class RoadNetwork : MonoBehaviour
         return mesh;
     }
 
+    // STUB: Will be replaced in Phase 2 with Triangle Fan + Bezier fillet mesh
     Mesh GenerateIntersectionMesh(RoadNode node)
     {
-        if (node.polygonVertices.Count < 2) return null; // Need at least a corner to draw a mesh
+        if (node.junctionEdges.Count < 2) return null;
 
-        Mesh mesh = new Mesh();
-        mesh.name = "Procedural_Fillet_Hub";
-
-        // We will collect all the points of our outer perimeter here
-        List<Vector3> perimeterVertices = new List<Vector3>();
-
-        for (int i = 0; i < node.connectedEdges.Count; i++)
-        {
-            RoadEdge currentRoad = node.connectedEdges[i];
-            RoadEdge nextRoad = node.connectedEdges[(i + 1) % node.connectedEdges.Count];
-
-            // 1. GET CURRENT ROAD'S VERTICES
-            // Figure out which way is "Outward" from the intersection
-            float tCurr = (currentRoad.a == node) ? currentRoad.trimStart : currentRoad.trimEnd;
-            float offsetCurr = (currentRoad.a == node) ? 0.01f : -0.01f;
-            float tCurrOutward = Mathf.Clamp(tCurr + offsetCurr, 0f, 1f);
-
-            Vector3 posCurr = MathUtility.CalculateBezierPoint(tCurr, currentRoad.a.position, currentRoad.controlPoint1, currentRoad.controlPoint2, currentRoad.b.position);
-            Vector3 posCurrOutward = MathUtility.CalculateBezierPoint(tCurrOutward, currentRoad.a.position, currentRoad.controlPoint1, currentRoad.controlPoint2, currentRoad.b.position);
-
-            Vector3 outCurr = (posCurrOutward - posCurr).normalized;
-            Vector3 rightCurr = Vector3.Cross(Vector3.up, outCurr).normalized;
-
-            Vector3 currentRoadRightVertex = posCurr + (rightCurr * (currentRoad.width / 2f));
-            Vector3 currentRoadLeftVertex = posCurr - (rightCurr * (currentRoad.width / 2f));
-
-            // 2. GET NEXT ROAD'S LEFT VERTEX
-            float tNext = (nextRoad.a == node) ? nextRoad.trimStart : nextRoad.trimEnd;
-            float offsetNext = (nextRoad.a == node) ? 0.01f : -0.01f;
-            float tNextOutward = Mathf.Clamp(tNext + offsetNext, 0f, 1f);
-
-            Vector3 posNext = MathUtility.CalculateBezierPoint(tNext, nextRoad.a.position, nextRoad.controlPoint1, nextRoad.controlPoint2, nextRoad.b.position);
-            Vector3 posNextOutward = MathUtility.CalculateBezierPoint(tNextOutward, nextRoad.a.position, nextRoad.controlPoint1, nextRoad.controlPoint2, nextRoad.b.position);
-
-            Vector3 outNext = (posNextOutward - posNext).normalized;
-            Vector3 rightNext = Vector3.Cross(Vector3.up, outNext).normalized;
-
-            Vector3 nextRoadLeftVertex = posNext - (rightNext * (nextRoad.width / 2f));
-
-            // 3. BUILD THE CONTINUOUS PERIMETER LOOP
-            // Add the straight line across the end of the current road
-            perimeterVertices.Add(currentRoadLeftVertex);
-            perimeterVertices.Add(currentRoadRightVertex);
-
-            // 4. SWEEP THE CURVE TO THE NEXT ROAD
-            // Find the exact middle if we were to draw a straight line between the roads
-            Vector3 straightLineMidpoint = Vector3.Lerp(currentRoadRightVertex, nextRoadLeftVertex, 0.5f);
-
-            // The Tension Slider (0.0 = straight line, 1.0 = deep V-shape)
-            float curveTightness = 0.08f;
-
-            // Pull the magnet back so it doesn't dive too deep into the center
-            Vector3 controlMagnet = Vector3.Lerp(straightLineMidpoint, node.position, curveTightness);
-
-            int curveResolution = 5;
-
-            for (int step = 1; step < curveResolution; step++)
-            {
-                float t = step / (float)curveResolution;
-
-                // The Double-Lerp Quadratic Bezier Cheat Code
-                Vector3 l1 = Vector3.Lerp(currentRoadRightVertex, controlMagnet, t);
-                Vector3 l2 = Vector3.Lerp(controlMagnet, nextRoadLeftVertex, t);
-                Vector3 curvePoint = Vector3.Lerp(l1, l2, t);
-
-                perimeterVertices.Add(curvePoint);
-            }
-        }
-
-        // --- NEW DIAGNOSTIC INTERCEPT ---
-        // Save the exact perimeter sequence back to the node before we build the mesh
-        node.diagnosticPerimeter = new List<Vector3>(perimeterVertices);
-
-        // 5. TRIANGULATE THE FAN
-        // Now that we have a perfect circle of vertices, we connect them all to the center point
-        int totalVertices = perimeterVertices.Count + 1; // Perimeter + 1 Center
-        Vector3[] vertices = new Vector3[totalVertices];
-        Vector2[] uvs = new Vector2[totalVertices];
-        int[] triangles = new int[perimeterVertices.Count * 3];
-
-        // Set Center Point
-        vertices[0] = node.position;
-        uvs[0] = new Vector2(node.position.x, node.position.z) * 0.1f; // Basic UV
-
-        // Set Perimeter Points & Triangles
-        for (int i = 0; i < perimeterVertices.Count; i++)
-        {
-            vertices[i + 1] = perimeterVertices[i];
-            uvs[i + 1] = new Vector2(vertices[i + 1].x, vertices[i + 1].z) * 0.1f;
-
-            int currentCorner = i + 1;
-            int nextCorner = (i + 1) % perimeterVertices.Count + 1;
-
-            triangles[i * 3 + 0] = 0;             // Center
-            triangles[i * 3 + 1] = currentCorner; // Corner A
-            triangles[i * 3 + 2] = nextCorner;    // Corner B
-        }
-
-        mesh.vertices = vertices;
-        mesh.triangles = triangles;
-        mesh.uv = uvs;
-        mesh.RecalculateNormals();
-
-        return mesh;
+        // Phase 2 will build the mesh here using junctionEdges data.
+        // For now, return null so we can visually test the JunctionEdge data with Gizmos.
+        return null;
     }
 
     // --- THE MASTER REBUILDER ---
@@ -382,10 +268,20 @@ public class RoadNetwork : MonoBehaviour
         {
             if (node.connectedEdges.Count > 2)
             {
-                // It's a true intersection! Run the complex geometry math.
-                node.CalculateIntersectionPolygon();
-                node.AlignRoadsToPolygon();
-                node.TrimIntersectingRoads();
+                // Triangle Fan & Spline intersection pipeline
+                node.CalculateJunctionEdges(node.radius);
+
+                // Set trim values so roads stop at the intersection radius
+                foreach (JunctionEdge je in node.junctionEdges)
+                {
+                    RoadEdge edge = je.edgeRef;
+                    float totalLength = Vector3.Distance(edge.a.position, edge.b.position);
+                    float trimFraction = (totalLength > 0f) ? (node.radius / totalLength) : 0f;
+                    trimFraction = Mathf.Clamp01(trimFraction);
+
+                    if (edge.a == node) edge.trimStart = trimFraction;
+                    else edge.trimEnd = 1f - trimFraction;
+                }
             }
             else
             {
@@ -397,7 +293,7 @@ public class RoadNetwork : MonoBehaviour
                     if (edge.a == node) edge.trimStart = 0f;
                     if (edge.b == node) edge.trimEnd = 1f;
                 }
-                node.polygonVertices.Clear(); // Erase any old magenta intersection data
+                node.junctionEdges.Clear();
             }
         }
 
