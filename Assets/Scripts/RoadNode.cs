@@ -42,26 +42,60 @@ public class RoadNode
 
         if (connectedEdges.Count < 2) return;
 
-        // 1. Build a JunctionEdge for each connected road
         for (int i = 0; i < connectedEdges.Count; i++)
         {
             RoadEdge edge = connectedEdges[i];
+            bool isNodeA = (edge.a == this);
 
-            // Direction pointing OUTWARD from this node toward the other end
-            RoadNode neighbor = (edge.a == this) ? edge.b : edge.a;
-            Vector3 dir = (neighbor.position - position).normalized;
+            Debug.Log($"<color=green>[2. Junctions] Node@{position} edge {i}: Reading CP1={edge.controlPoint1} CP2={edge.controlPoint2}</color>");
 
-            // Pull the road center back from the node center
-            Vector3 roadCenter = position + dir * intersectionRadius;
+            // 1. Binary search for the exact t where distance from node == intersectionRadius
+            float tLow = 0f;
+            float tHigh = 1f;
+            float t = 0.5f;
 
-            // Perpendicular (left-hand rule: Cross(up, forward) = right)
-            Vector3 right = Vector3.Cross(Vector3.up, dir).normalized;
+            for (int j = 0; j < 15; j++)
+            {
+                t = (tLow + tHigh) / 2f;
+                Vector3 pt = MathUtility.CalculateBezierPoint(t, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
+                float dist = Vector3.Distance(position, pt);
+
+                if (isNodeA)
+                {
+                    if (dist < intersectionRadius) tLow = t; else tHigh = t;
+                }
+                else
+                {
+                    if (dist < intersectionRadius) tHigh = t; else tLow = t;
+                }
+            }
+
+            // 2. Apply trim immediately so road mesh matches hub
+            if (isNodeA) edge.trimStart = t;
+            else edge.trimEnd = t;
+
+            // 3. Evaluate spline at t for the road center
+            Vector3 roadCenter = MathUtility.CalculateBezierPoint(t, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
+
+            // 4. Tangent via finite difference (always step toward higher t)
+            float epsilon = 0.001f;
+            float tNext = Mathf.Min(t + epsilon, 1f);
+            float tPrev = Mathf.Max(t - epsilon, 0f);
+            Vector3 pNext = MathUtility.CalculateBezierPoint(tNext, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
+            Vector3 pPrev = MathUtility.CalculateBezierPoint(tPrev, edge.a.position, edge.controlPoint1, edge.controlPoint2, edge.b.position);
+            Vector3 tangent = (pNext - pPrev).normalized;
+
+            // 5. CRITICAL: Outward tangent always points AWAY from the intersection
+            Vector3 outwardTangent = isNodeA ? tangent.normalized : -tangent.normalized;
+
+            // 6. Perpendicular from outward tangent: Cross(up, outward) = right
+            Vector3 right = Vector3.Cross(Vector3.up, outwardTangent).normalized;
             float halfWidth = edge.width / 2f;
 
             Vector3 leftVertex = roadCenter - right * halfWidth;
             Vector3 rightVertex = roadCenter + right * halfWidth;
 
-            float angle = Mathf.Atan2(dir.z, dir.x);
+            float angle = Mathf.Atan2(outwardTangent.z, outwardTangent.x);
 
             junctionEdges.Add(new JunctionEdge
             {
@@ -69,12 +103,12 @@ public class RoadNode
                 roadCenter = roadCenter,
                 leftVertex = leftVertex,
                 rightVertex = rightVertex,
-                direction = dir,
+                direction = outwardTangent,
                 angle = angle
             });
         }
 
-        // 2. Sort circularly (descending angle = clockwise when viewed top-down)
+        // Sort circularly (descending angle = clockwise when viewed top-down)
         junctionEdges.Sort((a, b) => b.angle.CompareTo(a.angle));
     }
 
@@ -117,5 +151,8 @@ public class RoadNode
             if (edge2.a == this) edge2.controlPoint1 = this.position - masterTangent * (dist2 * 0.33f);
             else edge2.controlPoint2 = this.position - masterTangent * (dist2 * 0.33f);
         }
+
+        if (connectedEdges.Count > 0)
+            Debug.Log($"<color=blue>[1. Splines] Smoothed node@{position}. CP1={connectedEdges[0].controlPoint1}</color>");
     }
 }

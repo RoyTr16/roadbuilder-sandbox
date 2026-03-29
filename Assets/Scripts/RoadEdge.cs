@@ -37,4 +37,19 @@ public class RoadEdge
         if (node == a) controlPoint1 = newControlPoint;
         else if (node == b) controlPoint2 = newControlPoint;
     }
+
+    // Approximate arc length by walking the cubic Bezier in discrete steps
+    public float CalculateLength(int steps = 50)
+    {
+        float length = 0f;
+        Vector3 prev = a.position;
+        for (int i = 1; i <= steps; i++)
+        {
+            float t = i / (float)steps;
+            Vector3 pt = MathUtility.CalculateBezierPoint(t, a.position, controlPoint1, controlPoint2, b.position);
+            length += Vector3.Distance(prev, pt);
+            prev = pt;
+        }
+        return length;
+    }
 }

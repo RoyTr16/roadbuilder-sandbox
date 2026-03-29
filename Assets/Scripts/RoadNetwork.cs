@@ -136,6 +136,8 @@ public class RoadNetwork : MonoBehaviour
             DestroyImmediate(transform.GetChild(i).gameObject);
         }
 
+        Debug.Log("<color=cyan>[3. Road Meshes] Generating asphalt meshes using current trims.</color>");
+
         // 2. Loop through our pure data and build the physical traces
         foreach (RoadEdge edge in edges)
         {
@@ -154,6 +156,8 @@ public class RoadNetwork : MonoBehaviour
             // 3. Generate the Custom Mesh
             filter.sharedMesh = GenerateSingleRoadMesh(edge);
         }
+
+        Debug.Log("<color=magenta>[4. Hub Meshes] Generating Intersection Hubs.</color>");
 
         // 4. Loop through the Nodes and build the Hubs
         foreach (RoadNode node in nodes)
@@ -323,31 +327,16 @@ public class RoadNetwork : MonoBehaviour
     // The Editor tool will call this every time you click the mouse
     public void RebuildNetwork()
     {
-        // 1. Process all Nodes based on their type
+        Debug.Log("<color=yellow>--- REBUILD NETWORK STARTED ---</color>");
+
+        // Pass 1: Smooth all spline control points first (dead ends + pass-throughs)
         foreach (RoadNode node in nodes)
         {
-            if (node.connectedEdges.Count > 2)
+            node.SmoothSplines();
+
+            // Reset trims for non-intersection nodes
+            if (node.connectedEdges.Count <= 2)
             {
-                // Triangle Fan & Spline intersection pipeline
-                node.CalculateJunctionEdges(node.radius);
-
-                // Set trim values so roads stop at the intersection radius
-                foreach (JunctionEdge je in node.junctionEdges)
-                {
-                    RoadEdge edge = je.edgeRef;
-                    float totalLength = Vector3.Distance(edge.a.position, edge.b.position);
-                    float trimFraction = (totalLength > 0f) ? (node.radius / totalLength) : 0f;
-                    trimFraction = Mathf.Clamp01(trimFraction);
-
-                    if (edge.a == node) edge.trimStart = trimFraction;
-                    else edge.trimEnd = 1f - trimFraction;
-                }
-            }
-            else
-            {
-                // It's a Spline! Smooth the curves and ensure full rendering.
-                node.SmoothSplines();
-
                 foreach (RoadEdge edge in node.connectedEdges)
                 {
                     if (edge.a == node) edge.trimStart = 0f;
@@ -357,7 +346,16 @@ public class RoadNetwork : MonoBehaviour
             }
         }
 
-        // 2. Build Physical Geometry
+        // Pass 2: Calculate junction edges for all intersections (reads finalized control points)
+        foreach (RoadNode node in nodes)
+        {
+            if (node.connectedEdges.Count >= 3)
+            {
+                node.CalculateJunctionEdges(node.radius);
+            }
+        }
+
+        // Pass 3 & 4: Build physical road meshes then intersection hub meshes
         BuildPhysicalRoads();
     }
 }
