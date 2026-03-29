@@ -267,7 +267,7 @@ public class RoadNetwork : MonoBehaviour
             JunctionEdge currentEdge = node.junctionEdges[i];
             JunctionEdge nextEdge = node.junctionEdges[(i + 1) % node.junctionEdges.Count];
 
-            // 1. Add the straight road-end cap (left → right)
+            // 1. Add the exact road-end cap vertices (left → right) — no math, pure data
             perimeterVertices.Add(currentEdge.leftVertex);
             perimeterVertices.Add(currentEdge.rightVertex);
 
@@ -281,17 +281,23 @@ public class RoadNetwork : MonoBehaviour
 
             if (angle < 135f)
             {
-                // Tight corner: pull inward for concave fillet
                 controlPoint = Vector3.Lerp(midpoint, node.position, curveStrength);
             }
             else
             {
-                // Wide angle (back of T-junction): push outward to preserve road bump
                 Vector3 outwardDir = (midpoint - node.position).normalized;
                 controlPoint = midpoint + (outwardDir * gapDist * 0.25f);
             }
 
-            // Quadratic Bezier curve samples (excluding endpoints — they are already in the list)
+            // Clamp: control point must not exceed intersection radius from center
+            Vector3 centerToCP = controlPoint - node.position;
+            if (centerToCP.magnitude > node.radius)
+            {
+                controlPoint = node.position + (centerToCP.normalized * node.radius);
+            }
+
+            // Quadratic Bezier curve samples — include interior points only
+            // Endpoints are the exact junction vertices (rightVertex above, leftVertex next iteration)
             for (int step = 1; step < curveResolution; step++)
             {
                 float t = step / (float)curveResolution;
@@ -299,6 +305,10 @@ public class RoadNetwork : MonoBehaviour
                 Vector3 l2 = Vector3.Lerp(controlPoint, nextEdge.leftVertex, t);
                 perimeterVertices.Add(Vector3.Lerp(l1, l2, t));
             }
+
+            // Watertight seal: add the exact endpoint so there is zero gap
+            // before the next iteration adds nextEdge.leftVertex as a cap start
+            perimeterVertices.Add(nextEdge.leftVertex);
         }
 
         // 3. Build the triangle fan mesh

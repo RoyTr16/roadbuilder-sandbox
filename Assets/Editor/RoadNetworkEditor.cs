@@ -53,31 +53,6 @@ public class RoadNetworkEditor : Editor
     // This runs constantly in the Scene View
     void OnSceneGUI()
     {
-        // --- INTERACTIVE BEZIER CONTROL POINT HANDLES (always active) ---
-        foreach (RoadNode node in network.nodes)
-        {
-            if (node.connectedEdges.Count < 3) continue;
-
-            foreach (RoadEdge edge in node.connectedEdges)
-            {
-                bool isNodeA = (edge.a == node);
-                Vector3 currentCP = isNodeA ? edge.controlPoint1 : edge.controlPoint2;
-
-                float handleSize = HandleUtility.GetHandleSize(currentCP) * 0.15f;
-                Handles.color = Color.magenta;
-
-                EditorGUI.BeginChangeCheck();
-                Vector3 newCP = Handles.FreeMoveHandle(currentCP, handleSize, Vector3.zero, Handles.SphereHandleCap);
-                if (EditorGUI.EndChangeCheck())
-                {
-                    Undo.RecordObject(network, "Move Control Point");
-                    if (isNodeA) edge.controlPoint1 = newCP;
-                    else edge.controlPoint2 = newCP;
-                    network.RebuildNetwork();
-                }
-            }
-        }
-
         if (!isDrawingMode) return;
 
         Event e = Event.current;

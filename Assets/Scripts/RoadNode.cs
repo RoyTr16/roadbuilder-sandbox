@@ -153,10 +153,11 @@ public class RoadNode
         }
         else if (connectedEdges.Count >= 3)
         {
-            // INTERSECTION: Detect the "main road" pair (widest angle) and apply tangent continuity
+            // INTERSECTION: Find the "most straight-through" pair by minimizing
+            // the angle between dirI and -dirJ (most collinear = smallest deviation)
             RoadEdge bestA = null;
             RoadEdge bestB = null;
-            float maxAngle = -1f;
+            float minDeviation = float.MaxValue;
 
             for (int i = 0; i < connectedEdges.Count; i++)
             {
@@ -167,20 +168,23 @@ public class RoadNode
 
                     Vector3 dirI = (ni.position - this.position).normalized;
                     Vector3 dirJ = (nj.position - this.position).normalized;
-                    float angle = Vector3.Angle(dirI, dirJ);
 
-                    if (angle > maxAngle)
+                    // Angle between dirI and the NEGATED dirJ: 0° = perfect straight-through
+                    float deviation = Vector3.Angle(dirI, -dirJ);
+
+                    if (deviation < minDeviation)
                     {
-                        maxAngle = angle;
+                        minDeviation = deviation;
                         bestA = connectedEdges[i];
                         bestB = connectedEdges[j];
                     }
                 }
             }
 
-            // Apply pass-through tangent continuity to the main road pair
-            if (bestA != null && bestB != null)
+            // Apply logic based on whether there's a clear main road
+            if (minDeviation < 45f && bestA != null && bestB != null)
             {
+                // Clear main road: apply pass-through tangent continuity
                 RoadNode neighborA = (bestA.a == this) ? bestA.b : bestA.a;
                 RoadNode neighborB = (bestB.a == this) ? bestB.b : bestB.a;
 
@@ -194,19 +198,33 @@ public class RoadNode
 
                 if (bestB.a == this) bestB.controlPoint1 = this.position - masterTangent * (distB * 0.33f);
                 else bestB.controlPoint2 = this.position - masterTangent * (distB * 0.33f);
+
+                // Side streets: point directly at their neighbor
+                foreach (RoadEdge edge in connectedEdges)
+                {
+                    if (edge == bestA || edge == bestB) continue;
+
+                    RoadNode neighbor = (edge.a == this) ? edge.b : edge.a;
+                    float dist = Vector3.Distance(this.position, neighbor.position);
+                    Vector3 newCP = this.position + ((neighbor.position - this.position).normalized * dist * 0.33f);
+
+                    if (edge.a == this) edge.controlPoint1 = newCP;
+                    else edge.controlPoint2 = newCP;
+                }
             }
-
-            // Side streets: point directly at their neighbor
-            foreach (RoadEdge edge in connectedEdges)
+            else
             {
-                if (edge == bestA || edge == bestB) continue;
+                // Y-Junction / no clear main road: point all handles symmetrically outward
+                foreach (RoadEdge edge in connectedEdges)
+                {
+                    RoadNode neighbor = (edge.a == this) ? edge.b : edge.a;
+                    float dist = Vector3.Distance(this.position, neighbor.position);
+                    Vector3 dir = (neighbor.position - this.position).normalized;
+                    Vector3 newCP = this.position + (dir * dist * 0.25f);
 
-                RoadNode neighbor = (edge.a == this) ? edge.b : edge.a;
-                float dist = Vector3.Distance(this.position, neighbor.position);
-                Vector3 newCP = this.position + ((neighbor.position - this.position).normalized * dist * 0.33f);
-
-                if (edge.a == this) edge.controlPoint1 = newCP;
-                else edge.controlPoint2 = newCP;
+                    if (edge.a == this) edge.controlPoint1 = newCP;
+                    else edge.controlPoint2 = newCP;
+                }
             }
         }
 
