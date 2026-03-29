@@ -255,6 +255,7 @@ public class RoadNetwork : MonoBehaviour
 
         int curveResolution = 8;
         float curveStrength = 0.2f;
+        float uvScale = 0.2f;
         List<Vector3> perimeterVertices = new List<Vector3>();
 
         for (int i = 0; i < node.junctionEdges.Count; i++)
@@ -291,12 +292,10 @@ public class RoadNetwork : MonoBehaviour
 
         // Index 0 = dead center
         vertices[0] = node.position;
-        uvs[0] = Vector2.zero;
 
         for (int i = 0; i < perimCount; i++)
         {
             vertices[i + 1] = perimeterVertices[i];
-            uvs[i + 1] = Vector2.zero;
 
             int current = i + 1;
             int next = (i + 1) % perimCount + 1;
@@ -304,6 +303,12 @@ public class RoadNetwork : MonoBehaviour
             triangles[i * 3 + 0] = 0;       // Center
             triangles[i * 3 + 1] = current;  // Current perimeter vertex
             triangles[i * 3 + 2] = next;     // Next perimeter vertex
+        }
+
+        // Planar projection UVs from world X/Z
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            uvs[i] = new Vector2(vertices[i].x, vertices[i].z) * uvScale;
         }
 
         mesh.vertices = vertices;
